@@ -126,10 +126,10 @@ streamlit run src/webapp/Chat met Ally.py --server.port 8005
 
 ## 4. Repository structuur
 ```
-├── README.md                           <- The top-level README for developers using this project
+├── README.md                           <- README for developers using this project
 ├── .streamlit                          <- Folder containing config-file for the streamlit app
 ├── scripts           
-|   └── lint                            <- Helper for linting (used in DevOps pipelines and for local use)
+|   └── lint                            <- Helper for linting
 ├── src
 |   └── data
 |       └── faiss                       <- Folder containing the FAISS vector store
@@ -137,11 +137,11 @@ streamlit run src/webapp/Chat met Ally.py --server.port 8005
 |   └── scheduled_runs                  <- Folder containing scripts which run in pipelines
 |       └── process_chats.py            <- Script to process each chat interaction
 |       └── runlogging.py               <- Helper function for logging
-|       └── my_faiss                    <- Folder containing scripts to build FAISS vector store
+|       └── my_faiss                    <- Folder containing scripts to build vector store
 |           └── generate_faiss_index.py <- Script to build FAISS vectore store
 |           └── get_articles.py         <- Script to retrieve articles from the Helpjuice API
 |           └── prepare_html_docs.py    <- Script to process a html extract from Helpjuice
-|   └── webapp                          <- Folder containing files related to the streamlit webapp
+|   └── webapp                          <- Folder containing files related to the webapp
 |       └── img                         <- Folder containing images for the webapp
 |       └── pages                       <- Folder additional pages or the webapp
 |           └── 2_Over Ally.py          <- About page
@@ -151,10 +151,12 @@ streamlit run src/webapp/Chat met Ally.py --server.port 8005
 |       └── styles.css                  <- Custom CSS
 ├── test                                <- Placeholder for tests (unit, integration)
 ├── .pre-commit-config.yml              <- Specs for linting
-├── azure-pipeline-faiss-build.yml      <- Azure DevOps pipeline to build/update FAISS index
+├── azure-pipeline-faiss-build.yml      <- Azure DevOps pipeline to build/update vectorstore
+├── azure-pipeline-github-mirror-initial.yml <- Pipeline to initially mirror to GitHub
+├── azure-pipeline-github-mirror.yml      <- Azure DevOps pipeline mirror to GitHub
 ├── azure-pipeline-reporting-build.yml  <- Azure DevOps pipeline to generate 'daily report'  
-├── azure-pipeline-schedule-runs.yml    <- Azure DevOps pipeline to schedule reporting and FAISS pipelines
-├── azure-pipeline-webapp.yml           <- Azure DevOps pipeline to build and deploy streamlit app
+├── azure-pipeline-schedule-runs.yml    <- Azure DevOps pipeline for reporting and vectorstore
+├── azure-pipeline-webapp.yml           <- Azure DevOps pipeline to build and deploy webapp
 ├── changelog.md                        <- Changelog for web app
 ├── Dockerfile.app                      <- Dockerfile for web app
 ├── Dockerfile.faiss                    <- Dockerfile for constructing/updating FAISS index

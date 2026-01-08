@@ -79,7 +79,6 @@ stages:
 
 # WORKING BUT NOT SIGNED
     - script: |
-
         # Set signing key
         gpg --import $(botGPG.secureFilePath)
         export GPG_TTY=$(tty)
@@ -96,8 +95,8 @@ stages:
         # Add GitHub remote
         git remote add github git@github.com:JeroenVranken/testout5.git
         git fetch github main
-        
-        git fetch origin release/open-source:release/open-source
+
+        # git fetch origin $(Build.SourceBranchName):$(Build.SourceBranchName)
 
         # Checkout the OSS branch
         git checkout github/main
@@ -109,7 +108,7 @@ stages:
         echo "Mirroring commit from $AUTHOR_NAME <$AUTHOR_EMAIL>"
 
         # Stage all changes from the internal branch
-        git checkout release/open-source -- .  # copy files from current internal commit
+        git checkout $(Build.SourceVersion) -- .  # copy files from current internal commit
 
         # Stage everything
         git add .
@@ -119,5 +118,4 @@ stages:
 
         # Push to GitHub
         git push github HEAD:main --force
-
       displayName: Push to Github

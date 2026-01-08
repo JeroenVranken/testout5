@@ -1,0 +1,237 @@
+trigger: none
+
+stages:
+
+- stage: CI
+  pool:
+    vmImage: ubuntu-latest
+  jobs:
+  - job: lint
+    displayName: Lint checks
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.10'
+    - checkout: self
+    - script: pip install pre-commit==3.8.0
+    - bash: pre-commit run --all -v
+  - job: SastBandit
+    displayName: SAST - Bandit
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.10'
+    - script: |
+        python -m pip install bandit
+      name: install_bandit
+      displayName: 'Install bandit'
+    # bandit -lll means only flag HIGH severity issues
+    - script: |
+        python -m bandit -r ./src -lll
+      displayName: 'Bandit scan'
+      condition: succeeded() 
+  - job: SastMdso
+    displayName: SAST - Terrascan and Trivy
+    steps:
+    - task: MicrosoftSecurityDevOps@1
+      displayName: 'Microsoft Security DevOps'
+      inputs:
+        tools: 'terrascan, trivy'
+        break: true # this build step if any high severity level results are found.
+        publish: true # will publish the output SARIF results file to the chosen pipeline artifact
+
+
+- stage: Mirror_to_GitHub
+  dependsOn: CI
+  pool:
+    vmImage: ubuntu-latest
+  jobs:
+  - job: Mirror_to_GitHub
+    displayName: Mirror to Github
+    steps:
+    - checkout: self
+      fetchDepth: 0
+      persistCredentials: true
+
+    - task: DownloadSecureFile@1
+      name: githubKey
+      inputs:
+        secureFile: azdo_github_mirror_testout5
+
+    - task: DownloadSecureFile@1
+      name: botGPG
+      inputs:
+        secureFile: oss-bot-gpg.asc
+
+    - script: |
+        set -e
+
+        # Put SSH deployment key in correct folder and create know_hosts file
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+
+        cp $(githubKey.secureFilePath) ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+        chmod 644 ~/.ssh/known_hosts
+      displayName: Configure deployment key
+
+# WORKING BUT NOT SIGNED
+    - script: |
+
+        # Set signing key
+        gpg --import $(botGPG.secureFilePath)
+        export GPG_TTY=$(tty)
+
+        # Tell git where to get the signing key
+        git config user.signingkey "$(gpg --list-secret-keys --keyid-format LONG | grep sec | awk '{print $2}' | cut -d'/' -f2)"
+        git config commit.gpgsign true
+
+        # Get metadata from latest internal commit
+        AUTHOR_NAME=$(git log -1 --pretty=format:'%an')
+        AUTHOR_EMAIL=$(git log -1 --pretty=format:'%ae')
+        COMMIT_MSG=$(git log -1 --pretty=format:'%B')
+
+        # Add GitHub remote
+        git remote add github git@github.com:JeroenVranken/testout5.git
+        git fetch github main
+        
+        git fetch origin release/open-source:release/open-source
+
+        # Checkout the OSS branch
+        git checkout github/main
+
+        # Configure bot committer identity
+        git config user.name "Alliantie Data Science Team"
+        git config user.email "alliantie-data-science-team@users.noreply.github.com"
+
+        echo "Mirroring commit from $AUTHOR_NAME <$AUTHOR_EMAIL>"
+
+        # Stage all changes from the internal branch
+        git checkout release/open-source -- .  # copy files from current internal commit
+
+        # Stage everything
+        git add .
+
+        # Commit with original author and bot signature
+        git commit -S --author="$AUTHOR_NAME <$AUTHOR_EMAIL>" -m "$COMMIT_MSG"
+
+        # Push to GitHub
+        git push github HEAD:main --force
+
+      displayName: Push to Github
+
+
+
+    # - script: |
+    #     python3 -m pip install --upgrade pip
+    #     pip install git-filter-repo
+    #   displayName: Install git-filter-repo
+
+# Actually includes all history again    
+    # - script: |
+    #     set -e
+
+    #     # Put SSH deployment key in correct folder and create know_hosts file
+    #     mkdir -p ~/.ssh
+    #     chmod 700 ~/.ssh
+
+    #     cp $(githubKey.secureFilePath) ~/.ssh/id_ed25519
+    #     chmod 600 ~/.ssh/id_ed25519
+
+    #     ssh-keyscan github.com >> ~/.ssh/known_hosts
+    #     chmod 644 ~/.ssh/known_hosts
+    #   displayName: Configure deployment key
+
+    # - script: |
+    #     # Add GitHub remote
+    #     git remote add github git@github.com:JeroenVranken/testout4.git
+    #     git fetch github main
+
+    #     # Fetch the branch we want to mirror
+    #     git fetch origin release/open-source:release/open-source
+
+    #     # Checkout OSS branch
+    #     git checkout github/main
+
+    #     # Configure bot identity
+    #     git config user.name "Alliantie Data Science Team"
+    #     git config user.email "alliantie-data-science-team@users.noreply.github.com"
+
+
+    #     # Mirror the latest commit from internal branch
+    #     LATEST_COMMIT=$(git rev-parse release/open-source)
+    #     echo "Mirroring latest commit $LATEST_COMMIT"
+
+    #     git push github $LATEST_COMMIT:main --force
+
+    #   displayName: Mirror latest internal commit to GitHub
+
+  # not sure about this one
+    # - script: |
+    #     # Add GitHub remote
+    #     git remote add github git@github.com:JeroenVranken/testout4.git
+    #     git fetch github main
+    #     git fetch github refs/tags/last-mirror:refs/tags/last-mirror || true
+
+    #     # Fetch internal branch explicitly
+    #     git fetch origin release/open-source:release/open-source
+        
+    #     # Determine last mirrored commit
+    #     if git rev-parse last-mirror >/dev/null 2>&1; then
+    #       LAST_MIRRORED=$(git rev-parse last-mirror)
+    #       echo "Last mirrored commit: $LAST_MIRRORED"
+    #     else
+    #       # If tag does not exist, start from the first internal commit
+    #       LAST_MIRRORED=$(git rev-list --max-parents=0 release/open-source)
+    #       echo "No previous tag found. Starting from $LAST_MIRRORED"
+    #     fi
+
+    #     # Find incremental commits since last mirrored
+    #     INCREMENTAL_COMMITS=$(git rev-list --reverse $LAST_MIRRORED..release/open-source)
+
+    #     if [ -z "$INCREMENTAL_COMMITS" ]; then
+    #       echo "No new commits to mirror"
+    #       exit 0
+    #     fi
+
+    #     echo "Incremental commits to mirror:"
+    #     echo "$INCREMENTAL_COMMITS"
+
+    #     # Push each incremental commit to GitHub main
+    #     for commit in $INCREMENTAL_COMMITS; do
+    #       echo "Mirroring commit $commit"
+    #       git push github $commit:main --force
+    #     done
+
+    #     # Update last-mirror tag to the latest internal commit
+    #     LATEST_COMMIT=$(git rev-parse release/open-source)
+    #     git tag -f last-mirror $LATEST_COMMIT
+    #     git push github last-mirror --force
+        
+    #   displayName: Mirror incremental commits to GitHub
+
+
+    # # Run git-filter-repo to keep only commits after SAFE_COMMIT
+    # - script: |
+    #     # Make a temporary clone to avoid messing with pipeline repo
+    #     git clone --no-hardlinks . filtered-repo
+    #     cd filtered-repo
+        
+    #     # Ensure a local branch exists
+    #     git checkout -B main HEAD
+
+    #     # Rewrite history so SAFE_COMMIT becomes the root commit
+    #     git filter-repo --commit-callback 'if commit.original_id == b"$(SAFE_COMMIT)": commit.parents = []' --force
+    #   displayName: Filter history from SAFE_COMMIT
+   
+    # - script: |
+    #     cd filtered-repo
+        
+    #     # Add the repository as remote
+    #     git remote add github git@github.com:JeroenVranken/testout3.git
+        
+    #     # Push the current head to the repository
+    #     git push github HEAD:refs/heads/main --force
+    #   displayName: Push filtered history to GitHub
